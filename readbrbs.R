@@ -1,9 +1,9 @@
-# mntdir <- "/run/user/1001/gvfs/"
-mntdir <- "/run/user/1000/gvfs/"
+mntdir <- "/run/user/1001/gvfs/"
+# mntdir <- "/run/user/1000/gvfs/"
 path <- paste0(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab/All_Staff/Seth/For Tom")
 brbdir <- dir(path) |> str_subset("mat$",negate = T)
 
-brbid <- brbdir[1]
+brbid <- brbdir[2]
 brblife <- dir(paste(path,brbid,sep="/"))
 
 roidat <- data.table()
@@ -18,10 +18,10 @@ for (d in 1:length(brblife)) {
   for (r in 1:length(brbrun)) {
     brbpre <- paste0(paste(path,brbid,brbday,"/",sep="/"), paste(brbid,brbday,brbrun[r],sep="_"))
     
-    rroi <- fread(paste0(brbpre,"_ROIs.csv")) |> t() |> as.data.table()
+    rroi <- fread(paste0(brbpre,"_Fneuropil.csv")) |> t() |> as.data.table()
     rroi[,t:=1:.N]
     rroi <- melt(rroi, id.vars = "t", variable.name = "roi")
-    rroi[,value := scale(value),by=roi]
+    rroi[,z:=scale(value),by=roi]
 
     stimtim <- fread(paste0(brbpre,"_stim.csv"))
     rmetadata <- fread(paste0(brbpre,"_info.csv"))
@@ -50,3 +50,7 @@ for (d in 1:length(brblife)) {
   }
 }
 
+squishdat <- roidat[,.(t=mean(t)/(60*15),value=mean(value),z=mean(z),soundID=unique(soundID)),by=.(roi,run,day,stimNum,binid)]
+basedat <- squishdat[metadat[condition=="USV_presentation"],on=.(run,day)]
+basefit <- lmer(log(value) ~ 1 + day + t + I(binid+1) + (1|stimNum:day:roi) + (1 + t|roi:day) + (1 + I(binid+1)|roi),
+                data=basedat,REML=F)
