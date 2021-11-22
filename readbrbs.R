@@ -1,5 +1,5 @@
-mntdir <- "/run/user/1001/gvfs/"
-# mntdir <- "/run/user/1000/gvfs/"
+# mntdir <- "/run/user/1001/gvfs/"
+mntdir <- "/run/user/1000/gvfs/"
 path <- paste0(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab/All_Staff/Seth/For Tom")
 brbdir <- dir(path) |> str_subset("mat$",negate = T)
 
@@ -33,7 +33,7 @@ for (d in 1:length(brblife)) {
     for (t in 1:nrow(stimtim)) {
       st <- stimtim[t,soundFrames]
       trng <- st:(bs*nb+st-1)
-      binid <- cut_number(trng,n = nb) %>% as.numeric()
+      binid <- cut_number(trng,n = nb) |> as.numeric()
       binid <- c(sort(-binid),binid-1)
       trng <- c((st-bs*nb):(st-1),trng)
       bindef <- rbind(bindef, data.table(t=trng,binid=binid,
@@ -50,7 +50,18 @@ for (d in 1:length(brblife)) {
   }
 }
 
-squishdat <- roidat[,.(t=mean(t)/(60*15),value=mean(value),z=mean(z),soundID=unique(soundID)),by=.(roi,run,day,stimNum,binid)]
-basedat <- squishdat[metadat[condition=="USV_presentation"],on=.(run,day)]
-basefit <- lmer(log(value) ~ 1 + day + t + I(binid+1) + (1|stimNum:day:roi) + (1 + t|roi:day) + (1 + I(binid+1)|roi),
-                data=basedat,REML=F)
+squishdat <- roidat[,.(t=mean(t)/(60*15),value=mean(value),z=mean(z),soundID=unique(soundID)),
+                    by=.(roi,run,day,stimNum,binid)]
+squishdat[,soundID:=as.factor(soundID)]
+condat <- squishdat[metadat[condition=="USV_presentation"],on=.(run,day)]
+condat[,postStim:=binid+1]
+confit <- lmer(log(value) ~ 1 + day + t + postStim + (1|stimNum:day) + (1|stimNum:day:roi) + (1 + t|roi:day) +
+                 (1 + postStim|roi), data=condat,REML=F)
+
+baseformula <- "log(value) ~ 1 + day + t + postStim:soundID + (1|stimNum:day) + (1|stimNum:day:roi) + (1 + t|roi:day)"
+soundReffs <- paste0("(0 + postStim:as.numeric(soundID==",condat[,unique(soundID)],")|roi:day)", collapse=" + ")
+
+confit <- lmer(paste(baseformula,soundReffs,sep=" + "), data=condat,REML=F)
+
+residuals(confit)[condat[,binid==0]] 
+
