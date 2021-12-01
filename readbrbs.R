@@ -1,5 +1,5 @@
-mntdir <- "/run/user/1001/gvfs/"
-# mntdir <- "/run/user/1000/gvfs/"
+# mntdir <- "/run/user/1001/gvfs/"
+mntdir <- "/run/user/1000/gvfs/"
 path <- paste0(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab/All_Staff/Seth/For Tom")
 brbdir <- dir(path) |> str_subset("mat$",negate = T)
 
@@ -64,7 +64,7 @@ for (d in 1:length(brblife)) {
 confit <- lmer(log(value) ~ 1 + day + t + postStim + (1|stimNum:day) + (1|stimNum:day:roi) + (1 + t|roi:day) +
                  (0 + postStim|roi:day), data=condat,REML=F)
 
-baseformula <- "log(value) ~ 1 + day + t + postStim:soundID + (1|stimNum:day) + (1|stimNum:day:roi) + (1 + t|roi:day)"
+baseformula <- "log(lum) ~ 1 + day + t + postStim:soundID + (1|stimNum:day) + (1|stimNum:day:roi) + (1 + t|roi:day)"
 soundReffs <- paste0("(0 + postStim:as.numeric(soundID==",condat[,unique(soundID)],")|roi:day)", collapse=" + ")
 
 confit <- lmer(paste(baseformula,soundReffs,sep=" + "), data=condat,REML=F)
@@ -81,8 +81,8 @@ slicetime <- function(t,wsize,wnum) {
 }
 
 
-condat <- roidat[stimdat[,slicetime(soundFrames,45,1),by=.(day,run,stimNum,soundID)][
-  metadat[condition=="USV_presentation",],on=.(day,run)],
+condat <- roidat[stimdat[,slicetime(soundFrames,20,1),by=.(day,run,stimNum,soundID)][
+  metadat[condition=="Baseline",],on=.(day,run)],
   on=.(day,run,t)][,.(t=mean(t)/60*15,lum=mean(value),lumz=mean(z)),
                    by=.(day,run,stimNum,roi,soundID,winid)]
-condat[,postStim:=binid+1]
+condat[,postStim:=as.numeric(winid>=0)]
