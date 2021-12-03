@@ -1,10 +1,11 @@
-# mntdir <- "/run/user/1001/gvfs/"
-mntdir <- "/run/user/1000/gvfs/"
+mntdir <- "/run/user/1001/gvfs/"
+# mntdir <- "/run/user/1000/gvfs/"
 path <- paste0(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab/All_Staff/Seth/For Tom")
 brbdir <- dir(path) |> str_subset("mat$",negate = T)
 
 brbid <- brbdir[2]
 brblife <- dir(paste(path,brbid,sep="/"))
+cond <- c("Baseline")
 
 roidat <- data.table()
 metadat <- data.table()
@@ -18,6 +19,10 @@ for (d in 1:length(brblife)) {
   
   for (r in 1:length(brbrun)) {
     brbpre <- paste0(paste(path,brbid,brbday,"/",sep="/"), paste(brbid,brbday,brbrun[r],sep="_"))
+    rmetadata <- fread(paste0(brbpre,"_info.csv"))
+    rmetadata$day <- brbday
+    
+    if (!("All" %in% cond) & !(rmetadata$condition %in% cond)) next
     
     rroi <- fread(paste0(brbpre,"_Fneuropil.csv")) |> t() |> as.data.table()
     rroi[,t:=1:.N]
@@ -29,8 +34,6 @@ for (d in 1:length(brblife)) {
     # overlap <- stimtim[,which(diff(soundFrames)==0)]
     # if (length(overlap)>0) 
     #   stimtim <- stimtim[-c(overlap,overlap+1)]
-    rmetadata <- fread(paste0(brbpre,"_info.csv"))
-    rmetadata$day <- brbday
     
     # bs <- 45
     # nb <- 1
@@ -56,11 +59,6 @@ for (d in 1:length(brblife)) {
   }
 }
 
-# squishdat <- roidat[,.(t=mean(t)/(60*15),value=mean(value),z=mean(z),soundID=unique(soundID)),
-#                     by=.(roi,run,day,stimNum,binid)]
-# squishdat[,soundID:=as.factor(soundID)]
-# condat <- squishdat[metadat[condition=="USV_presentation"],on=.(run,day)]
-# condat[,postStim:=binid+1]
 confit <- lmer(log(value) ~ 1 + day + t + postStim + (1|stimNum:day) + (1|stimNum:day:roi) + (1 + t|roi:day) +
                  (0 + postStim|roi:day), data=condat,REML=F)
 
@@ -76,13 +74,12 @@ slicetime <- function(t,wsize,wnum) {
   winid <- cut_number(trng,n = wnum) |> as.numeric()
   winid <- c(sort(-winid),winid-1)
   trng <- c((t-wsize*wnum):(t-1),trng)
-  
   return(data.table(t=trng,winid=winid))
 }
 
 
 condat <- roidat[stimdat[,slicetime(soundFrames,20,1),by=.(day,run,stimNum,soundID)][
   metadat[condition=="Baseline",],on=.(day,run)],
-  on=.(day,run,t)][,.(t=mean(t)/60*15,lum=mean(value),lumz=mean(z)),
+  on=.(day,run,t)][,.(t=mean(t)/(60*15),lum=mean(value),lumz=mean(z)),
                    by=.(day,run,stimNum,roi,soundID,winid)]
 condat[,postStim:=as.numeric(winid>=0)]
