@@ -1,10 +1,11 @@
-dayreader <- function(path, cond="All", type=c("roi","stim")) {
+dayreader <- function(path, cond="All", type=c("roi","stim","pil")) {
   brbstr <- str_split_fixed(dir(path),"_",4)
   brbrun <- unique(brbstr[,3])
   filebase <- paste(dirname(path) |> basename(), basename(path),sep="_")
   roidat <- data.table()
   metadat <- data.table()
   stimdat <- data.table()
+  pildat <- data.table()
   
   for (r in brbrun) {
     brbpre <- file.path(path, paste(filebase,r,sep="_"))
@@ -13,12 +14,19 @@ dayreader <- function(path, cond="All", type=c("roi","stim")) {
     metadat <- rbind(metadat, rmetadat)
     
     if ("roi" %in% type) {
-      rroi <- fread(paste0(brbpre,"_Fneuropil.csv")) |> t() |> as.data.table()
+      rroi <- fread(paste0(brbpre,"_Fsoma.csv")) |> t() |> as.data.table()
       rroi[,t:=1:.N]
       rroi <- melt(rroi, id.vars = "t", variable.name = "roi", value.name = "lum")
       # rroi[,lumz:=scale(lum),by=roi]
-      rroi$run <- r
       
+      if ("pil" %in% type) {
+        rpil <- fread(paste0(brbpre,"_Fneuropil.csv")) |> t() |> as.data.table()
+        rpil[,t:=1:.N]
+        rpil <- melt(rpil, id.vars = "t", variable.name = "roi", value.name = "pil")
+        rroi <- rroi[rpil, on=.(t,roi)]
+      }
+      
+      rroi$run <- r
       roidat <- rbind(roidat, rroi)
     }
     
@@ -29,6 +37,9 @@ dayreader <- function(path, cond="All", type=c("roi","stim")) {
       
       stimdat <- rbind(stimdat,stimtim)
     }
+    
+    
+    
   }
   
   out <- list(meta=metadat)
@@ -47,7 +58,7 @@ slicetime <- function(t,wsize,wnum) {
   return(data.table(t=trng,winid=winid))
 }
 
-brbreader <- function(path, cond="All", type=c("roi","stim")) {
+brbreader <- function(path, cond="All", type=c("roi","stim","pil")) {
   brbday <- dir(file.path(path))
   out <- list(meta=data.table())
   for (l in type) out[[l]] <- data.table()
@@ -59,6 +70,14 @@ brbreader <- function(path, cond="All", type=c("roi","stim")) {
       out[[l]] <- rbind(out[[l]], ddat[[l]])
     }
   }
-  
+
+  return(out)
+}
+
+
+binnify <- function(roi,stim,wsize,wnum) {
+  slicedat <- roi[stim[,slicetime(soundFrames,wsize,wnum),by=.(day,run,stimNum,soundID)],on=.(day,run,t)]
+  out <- slicedat[,lapply(.SD,mean),by=.(day,run,stimNum,roi,soundID,winid)]
+  out[,postStim:=winid>=0]
   return(out)
 }
