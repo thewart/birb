@@ -61,11 +61,15 @@ slicetime <- function(t,wsize,wnum) {
 brbreader <- function(path, cond="All", type=c("roi","stim","pil")) {
   brbday <- dir(file.path(path))
   out <- list(meta=data.table())
-  for (l in type) out[[l]] <- data.table()
+  for (l in type) {
+    if (l == "pil") next
+    out[[l]] <- data.table()
+  }
   
   for (d in brbday) {
     ddat <- dayreader(file.path(path,d), cond, type)
     if (length(ddat[[1]])>0) for (l in names(ddat)) {
+      if (l == "pil") next
       ddat[[l]]$day <- d
       out[[l]] <- rbind(out[[l]], ddat[[l]])
     }
@@ -76,7 +80,7 @@ brbreader <- function(path, cond="All", type=c("roi","stim","pil")) {
 
 
 binnify <- function(roi,stim,wsize,wnum) {
-  slicedat <- roi[stim[,slicetime(soundFrames,wsize,wnum),by=.(day,run,stimNum,soundID)],on=.(day,run,t)]
+  slicedat <- roi[stim[,slicetime(soundFrames,wsize,wnum),by=.(day,run,stimNum,soundID)],on=.(day,run,t),allow.cartesian=T]
   out <- slicedat[,lapply(.SD,mean),by=.(day,run,stimNum,roi,soundID,winid)]
   out[,postStim:=winid>=0]
   return(out)

@@ -1,30 +1,36 @@
-mntdir <- switch(Sys.info()['nodename'],
-                 `yawarakai-te`="/run/user/1001/gvfs",
-                 `seth-Z370P-D3`="/run/user/1000/gvfs")
-path <- file.path(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab","All_Staff","Seth/For Tom")
+# mntdir <- switch(Sys.info()['nodename'],
+                 # `yawarakai-te`="/run/user/1001/gvfs",
+                 # `seth-Z370P-D3`="/run/user/1000/gvfs")
+# path <- file.path(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab","All_Staff","Seth/For Tom")
 
 brbid <- dir(path) |> str_subset("mat$",negate = T)
-b <- brbid[1]
+b <- brbid[4]
 # brbday <- dir(file.path(path,b))
 
 brbdat <- brbreader(file.path(path,b))
-d <- brbdat$meta[,unique(day)[1]]
-c <- brbdat$meta[day==d,unique(condition)[2]]
-r <- brbdat$meta[day==d & condition==c,run]
-# daydat <- dayreader(file.path(path,b,d), cond = "Baseline")
+c <- "USV_presentation"
+cmeta <- brbdat$meta[condition==c]
+i <- 4
+d <- cmeta[i,day]
+r <- cmeta[i,run]
+
 ggplot(brbdat$roi[day==d & run==r][roi %in% sample(unique(roi),6)][,.(t=t,lum=lum/mean(lum)),by=roi], aes(y=lum,x=t)) + 
   geom_line() + facet_wrap("roi") + ggtitle(paste(d,c))
 
-redat <- binnify(brbdat$roi[day==d],brbdat$stim[day==d],30,1)
+redat <- binnify(brbdat$roi[day==d & run==r],brbdat$stim[day==d & run==r],30,1)
+redat[,t := t/(15*60)]
+redat[,postStim := as.numeric(postStim)]
+# redat[,c("luml1","luml2") := .(c(NA,lum[-.N]),c(NA,NA,lum[-c(.N-1,.N)])),by=.(day,run,roi,stimNum)]
 
-confit <- lmer(log(value) ~ 1 + t + postStim + (1|stimNum) + (1|stimNum:roi) + (1 + t|roi) +
-                 (0 + postStim|roi), data=condat,REML=F)
+soundeffs <- paste0("postStim:as.numeric(soundID==",redat[,sort(unique(soundID))],")", collapse=" + ")
+fixeffs <- paste0("log(lum) ~ 1 + t + ",soundeffs)
+raneffs <- paste0("(1|t) + (1|stimNum:roi) + (1+t|roi) + (0+",soundeffs,"||roi)")
 
-baseformula <- "log(pil) ~ 1 + t + postStim:as.factor(soundID) + (1|stimNum) + (1|stimNum:roi) + (1 + t|roi)"
-soundReffs <- paste0("(0 + postStim:as.numeric(soundID==",condat[,unique(soundID)],")|roi)", collapse=" + ")
+bigfit <- lmer(paste(fixeffs,raneffs,sep=" + "), data=redat,REML=F)
+lilfit <- lmer(log(lum) ~ 1 + t + postStim + 
+                 (1|t) + (1|stimNum:roi) + (1+t|roi) + 
+                 (0+postStim|soundID) + (0+postStim|roi) + (0+postStim|soundID:roi), 
+               data=redat,REML=F)
+nullfit <- lmer(log(lum) ~ 1 + t + (1|t) + (1|stimNum:roi) + (1+t|roi), data=redat,REML=F)
 
-confit <- lmer(paste(baseformula,soundReffs,sep=" + "), data=condat,REML=F)
-bigfit <- lmer(paste(baseformula,"(1|t)",soundReffs,sep=" + "), data=condat,REML=F)
-
-residuals(confit)[condat[,binid==0]] 
-
+anova(bigfit,lilfit,nullfit)
