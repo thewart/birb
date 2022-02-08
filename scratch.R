@@ -1,5 +1,5 @@
 brbid <- dir(path) |> str_subset("mat$",negate = T)
-c <- "USV_presentation"
+c <- "Baseline"
 lr <- data.table()
 for (b in brbid) {
   brbdat <- brbreader(file.path(path,b),cond=c,type=c("roi","stim"))
@@ -21,18 +21,20 @@ for (b in brbid) {
     # diffdat <- redat[,diff(log(lum)),by=.(day,run,stimNum,soundID,roi)]
     # diffdat <- redat[,diff(lum),by=.(day,run,stimNum,soundID,roi)]
     
-    diffdat <- whiten_timepoints(ldat,stim,45,2)
+    diffdat <- whiten_timepoints(ldat,stim,30,2,cov.est="shrinkage")
     
     lr <- rbind(lr,data.table(id = b, day = d, run = r,
                               whitened = logLik(lmer(z ~ 1 + (1|roi),data=diffdat,REML=F)) - 
                                 logLik(lm(z ~ 0,data=diffdat,REML=F)),
+                              rankone = logLik(lmer(delta ~ 1 + (1|roi) + (1|stimNum),data=diffdat,REML=F)) - 
+                                logLik(lmer(delta ~ 0 + (1|stimNum),data=diffdat,REML=F)),
                               raw = logLik(lmer(delta ~ 1 + (1|roi),data=diffdat,REML=F)) - 
                                 logLik(lm(delta ~ 0,data=diffdat,REML=F)))
     )
   }
 }
 
-ggplot(melt(lr),aes(y=value,x=paste(id,run,sep = ":"),fill=variable)) + geom_col(position = position_dodge()) + 
+ggplot(melt(lr),aes(y=value,x=paste(id,day,run,sep = ":"),fill=variable)) + geom_col(position = position_dodge()) + 
   xlab(NULL) + ylab("Likelihood ratio") + scale_fill_discrete(NULL) + theme(legend.position = "bottom") +
   geom_hline(yintercept = qchisq(0.95,df = 2)/2)
 

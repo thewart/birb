@@ -109,27 +109,30 @@ whiten <- function(ldat, center=T, scale=T) {
 }
 
 
-permnull <- function(dat,nsamp=1e3,in_roi=F,tstype="prop_sig") {
-  ts <- vector(length=nsamp)
+# permnull <- function(dat,nsamp=1e3,in_roi=F,tstype="prop_sig") {
+  # ts <- vector(length=nsamp)
+permnull <- function(value,group=NULL)
   
   for (i in 1:nsamp) {
-    cat(i,"\r")
-    
-    if (in_roi) {
-      dat[,px:=delta*sample(c(1,-1),.N,T)]
+    dat <- data.table(value,group)
+    if (isnull(group)) {
+      pv <- dat[,value*sample(c(1,-1),1,T)]
     } else {
-      dat[,px:=delta*sample(c(1,-1),1),by=stimNum]
+      pv <- dat[,value*sample(c(1,-1),1),by=group]
     }
     
-    ts[i] <- switch(tstype, 
-                    pop_mean = dat[,t.test(px)$statistic,by=roi][,t.test(V1)$statistic],
-                    prop_sig = dat[,t.test(px)$p.value,by=roi][,mean(V1>0.95)],
-                    lrt = logLik(lmer(px ~ 1 + (1|roi) + (1|stimNum),data=dat,REML = F)) - 
-                      logLik(lmer(px ~ 0 + (1|stimNum),data=dat,REML = F)))
-  }
-  
-  return(ts)
+  #   ts[i] <- switch(tstype, 
+  #                   pop_mean = dat[,t.test(px)$statistic,by=roi][,t.test(V1)$statistic],
+  #                   prop_sig = dat[,t.test(px)$p.value,by=roi][,mean(V1>0.95)],
+  #                   lrt = logLik(lmer(px ~ 1 + (1|roi) + (1|stimNum),data=dat,REML = F)) - 
+  #                     logLik(lmer(px ~ 0 + (1|stimNum),data=dat,REML = F)))
+  # }
+  # 
+  # return(ts)
+    return(pv)
 }
+
+
 
 lossybin <- function(ldat,wsize,s=1) {
   bigt <- ldat[,max(t)]
@@ -139,23 +142,25 @@ lossybin <- function(ldat,wsize,s=1) {
   return(bindat)
 }
 
-Wcalc <- function(ldat,wsize=5,s=1,method="ZCA-cor") {
+Wcalc <- function(ldat,wsize=5,s=1,method="ZCA-cor",cov.est="shrinkage") {
   bdat <- lossybin(ldat,wsize,s)
   ddat <- bdat[,.(t=t[-1],delta=diff(log(lum))),by=.(day,run,roi)] |> dcast(t ~ roi, value.var="delta")
   X <- ddat[,-1,with=F] |> as.matrix()
   mu <- colMeans(X)
   
-  if (nrow(X) < ncol(X)) {
-    
+  if (cov.est=="shrinkage") {
+    Shat <- cov.shrink(X,lambda.var = 0)
+  } else {
+    Shat <- cov(X)
   }
-  
-  W <- whiteningMatrix(cov(X),method)
+
+  W <- whiteningMatrix(Shat,method)
   return(list(mu=mu,W=W))
 }
 
 
-whiten_timepoints <- function(ldat,stim,wsize,s,method="ZCA-cor") {
-  W <- Wcalc(ldat,wsize,s,method)
+whiten_timepoints <- function(ldat,stim,wsize,s,method="ZCA-cor",w0size=wsize,cov.est="shrinkage") {
+  W <- Wcalc(ldat,w0size,s,method,cov.est)
   # if (any(is.na(W$W))) W <- Wcalc(ldat,1,s,method)
   lsdat <- binnify(ldat,stim,wsize,1)
   dsdat <- lsdat[,.(delta=diff(log(lum))),by=.(day,run,stimNum,soundID,roi)]
