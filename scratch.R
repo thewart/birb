@@ -1,13 +1,42 @@
-lopass <- function(og, lofi) {
-  juh <- fft(og-mean(og))
-  filt <- c(rep(1,lofi),rep(0,length(juh)-lofi*2),rep(1,lofi))
+brbid <- dir(path) |> str_subset("mat$",negate = T)
+c <- "USV_presentation"
+lr <- data.table()
+for (b in brbid) {
+  brbdat <- brbreader(file.path(path,b),cond=c,type=c("roi","stim"))
   
-  return(Re(fft(filt*juh,inverse = T))/length(juh) + mean(og))
+  for (j in 1:nrow(brbdat$meta)) {
+    d <- brbdat$meta[j,day]
+    r <- brbdat$meta[j,run]
+    
+    stim <- brbdat$stim[day==d & run==r]
+    ldat <- brbdat$roi[day==d & run==r]
+    # udat <- whiten(ldat[t != 1])
+    # dummy <- stim[,soundFrames + shift(soundFrames)][-1]/2 |> round()
+    # stim <- rbind(stim,data.table(soundFrames=as.integer(dummy), stimNum=nrow(stim)+(1:length(dummy)), 
+    # soundID=0, run=stim[1,run], day=stim[1,day]))
+    
+    # redat <- binnify(udat,stim,30,1)
+    # redat[,t := t/(15*60)]
+    # redat[,postStim := as.numeric(postStim)]
+    # diffdat <- redat[,diff(log(lum)),by=.(day,run,stimNum,soundID,roi)]
+    # diffdat <- redat[,diff(lum),by=.(day,run,stimNum,soundID,roi)]
+    
+    diffdat <- whiten_timepoints(ldat,stim,45,2)
+    
+    lr <- rbind(lr,data.table(id = b, day = d, run = r,
+                              whitened = logLik(lmer(z ~ 1 + (1|roi),data=diffdat,REML=F)) - 
+                                logLik(lm(z ~ 0,data=diffdat,REML=F)),
+                              raw = logLik(lmer(delta ~ 1 + (1|roi),data=diffdat,REML=F)) - 
+                                logLik(lm(delta ~ 0,data=diffdat,REML=F)))
+    )
+  }
 }
 
-brbdat$roi <- brbdat$roi[,bl:=lopass(lum,10),by=.(day,roi)]
-condat[,postStim:=as.numeric(winid>=0)]
+ggplot(melt(lr),aes(y=value,x=paste(id,run,sep = ":"),fill=variable)) + geom_col(position = position_dodge()) + 
+  xlab(NULL) + ylab("Likelihood ratio") + scale_fill_discrete(NULL) + theme(legend.position = "bottom") +
+  geom_hline(yintercept = qchisq(0.95,df = 2)/2)
 
-lmer(log(lum) ~ 1 + offset(log(bl)) + t + postStim + (1|t) + (1|stimNum) + (1|stimNum:roi) + (1 + t|roi) + (0 + postStim|roi), data=condat,REML=F) |> summary()
-
-ggplot(brbdat$roi[day==unique(day)[1] & roi=="V3"]) + geom_line(aes(x=t,y=lum)) + geom_line(aes(x=t,y=bl),color="red")
+##### dummy stims
+stim <- bdat$stim[day==d]
+dummy <- stim[,soundFrames + shift(soundFrames)][-1]/2 |> round()
+stim <- rbind(stim,data.table(soundFrames=as.integer(dummy), stimNum=nrow(stim)+(1:length(dummy)), soundID=0, run=stim[1,run], day=stim[1,day]))
