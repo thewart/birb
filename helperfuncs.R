@@ -110,17 +110,18 @@ whiten <- function(ldat, center=T, scale=T) {
 
 
 # permnull <- function(dat,nsamp=1e3,in_roi=F,tstype="prop_sig") {
-  # ts <- vector(length=nsamp)
-permnull <- function(value,group=NULL)
+# ts <- vector(length=nsamp)
+permnull <- function(value,group=NULL) {
   
-  for (i in 1:nsamp) {
-    dat <- data.table(value,group)
-    if (isnull(group)) {
-      pv <- dat[,value*sample(c(1,-1),1,T)]
-    } else {
-      pv <- dat[,value*sample(c(1,-1),1),by=group]
-    }
-    
+  if (is.null(group)) {
+    pval <- value*sample(c(1,-1),length(value),T)
+  } else {
+    dat <- data.table(i=1:length(value),value,group)
+    dat <- dat[,.(i,value*sample(c(1,-1),1)),by=group]
+    setkey(dat,"i")
+    pval <- dat$V2
+  }
+  
   #   ts[i] <- switch(tstype, 
   #                   pop_mean = dat[,t.test(px)$statistic,by=roi][,t.test(V1)$statistic],
   #                   prop_sig = dat[,t.test(px)$p.value,by=roi][,mean(V1>0.95)],
@@ -129,7 +130,7 @@ permnull <- function(value,group=NULL)
   # }
   # 
   # return(ts)
-    return(pv)
+  return(pval)
 }
 
 
@@ -138,7 +139,7 @@ lossybin <- function(ldat,wsize,s=1) {
   bigt <- ldat[,max(t)]
   trim <- ldat[,(bigt-s+1) %% wsize]
   bindat <- ldat[t %in% s:(bigt-trim), .(t=mean(t),lum=mean(lum)), 
-       by=.(day,run,roi,cut_interval(t,length=wsize) |> as.numeric())][,-"as.numeric",with=F]
+                 by=.(day,run,roi,cut_interval(t,length=wsize) |> as.numeric())][,-"as.numeric",with=F]
   return(bindat)
 }
 
@@ -153,7 +154,7 @@ Wcalc <- function(ldat,wsize=5,s=1,method="ZCA-cor",cov.est="shrinkage") {
   } else {
     Shat <- cov(X)
   }
-
+  
   W <- whiteningMatrix(Shat,method)
   return(list(mu=mu,W=W))
 }
