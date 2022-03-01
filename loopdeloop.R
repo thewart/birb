@@ -5,8 +5,8 @@ library(ggplot2)
 # path <- "~/Desktop/ForTom/"
 
 brbid <- dir(path) |> str_subset("mat$",negate = T)
-c <- "Baseline"
-nsamp <- 1e2
+c <- c("Isolated","Female_distal_neg","Female_distal_pos","Female_proximal_neg","Female_proximal_pos")
+nsamp <- 0
 tsdat <- data.table()
 ts0 <- vector()
 shadup <- lmerControl(check.conv.singular = .makeCC(action = "ignore",tol = formals(isSingular)$tol))
@@ -20,11 +20,11 @@ for (b in brbid) {
     stim <- brbdat$stim[day==d & run==r]
     ldat <- brbdat$roi[day==d & run==r]
     ldat[,lum:=lm(log(lum) ~ 1 + t) |> resid(),by=roi]
-    # dummy <- stim[,soundFrames + shift(soundFrames)][-1]/2 |> round()
-    # stim <- rbind(stim,data.table(soundFrames=as.integer(dummy), stimNum=nrow(stim)+(1:length(dummy)), 
-    # soundID=0, run=stim[1,run], day=stim[1,day]))
+    dummy <- stim[,soundFrames + shift(soundFrames)][-1]/2 |> round()
+    stim <- rbind(stim,data.table(soundFrames=as.integer(dummy), stimNum=nrow(stim)+(1:length(dummy)),
+                                  soundID=0, run=stim[1,run], day=stim[1,day]))
     
-    redat <- binnify(ldat,stim,30,1)
+    redat <- binnify(ldat,stim,5,1)
     redat[,t := t/(15*60)]
     # redat[,postStim := as.numeric(postStim)]
     diffdat <- redat[,.(delta=diff(lum)),by=.(day,run,stimNum,soundID,roi)]
@@ -32,17 +32,10 @@ for (b in brbid) {
     
     # diffdat <- whiten_timepoints(ldat,stim,30,2,cov.est="shrinkage")
     
-    # lr <- rbind(lr,data.table(id = b, day = d, run = r,
-    #                           whitened = logLik(lmer(z ~ 1 + (1|roi),data=diffdat,REML=F)) - 
-    #                             logLik(lm(z ~ 0,data=diffdat,REML=F)),
-    #                           rankone = logLik(lmer(delta ~ 1 + (1|roi) + (1|stimNum),data=diffdat,REML=F)) - 
-    #                             logLik(lmer(delta ~ 0 + (1|stimNum),data=diffdat,REML=F)),
-    #                           raw = logLik(lmer(delta ~ 1 + (1|roi),data=diffdat,REML=F)) - 
-    #                             logLik(lm(delta ~ 0,data=diffdat,REML=F)))
-    # )
+    brbdat
     lr <- logLik(lmer(delta ~ 1 + (1|roi) + (1|stimNum),data=diffdat,REML=F,control=shadup)) - 
       logLik(lmer(delta ~ 0 + (1|stimNum),data=diffdat,REML=F,control=shadup))
-    tsdat <- rbind(tsdat,data.table(ts=lr,id=b,day=d,run=r))
+    tsdat <- rbind(tsdat,data.table(ts=lr,id=b,day=d,run=r,c=))
     
     if (nsamp>0) {
       tsi <- vector()
@@ -59,13 +52,3 @@ for (b in brbid) {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-

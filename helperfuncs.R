@@ -47,7 +47,7 @@ dayreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
     }
     
   }
-  
+  metadat[,run:=str_extract(run,"\\d*$")]
   out <- list(meta=metadat)
   if ("roi" %in% type) out$roi <- roidat
   if ("stim" %in% type) out$stim <- stimdat
@@ -91,8 +91,8 @@ brbreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
 
 
 binnify <- function(roi,stim,wsize,wnum,past=T) {
-  slicedat <- roi[stim[,slicetime(soundFrames,wsize,wnum,past),by=.(day,run,stimNum,soundID)],on=.(day,run,t),allow.cartesian=T]
-  out <- slicedat[,lapply(.SD,mean),by=.(day,run,stimNum,roi,soundID,winid)]
+  slicedat <- roi[stim[,slicetime(soundFrames,wsize,wnum,past),by=.(day,run,stimNum,soundFrequency,soundID)],on=.(day,run,t),allow.cartesian=T]
+  out <- slicedat[,lapply(.SD,mean),by=.(day,run,stimNum,roi,winid)]
   # if (past) out[,postStim:=winid>=0]
   if (out[,any(is.na(roi))]) out <- out[-which(is.na(roi))]
   return(out)
