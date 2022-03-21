@@ -5,7 +5,7 @@
 
 brbid <- dir(path) |> str_subset("mat$",negate = T)
 c <- c("Female_distal_neg","Female_distal_pos","Female_proximal_neg","Female_proximal_pos")
-b <- brbid[6]
+b <- brbid[5]
 brbdat <- brbreader(file.path(path,b),cond = c)
 
 
@@ -70,10 +70,10 @@ redat <- binnify(ldat,brbdat$stim,1,15)
 diffdat <- redat[,.(kHz=soundFrequency[-1]/1e3,winid=winid[-1],delta=diff(lum)),
                  by=.(day,run,stimNum,roi)]
 
-diffdat[winid>-6,mean(delta),by=.(day,run,kHz,winid)][brbdat$meta[,.(day,run,condition)],on=.(day,run)] |> 
+psthplt <- diffdat[winid>-6,mean(delta),by=.(day,run,kHz,winid)][brbdat$meta[,.(day,run,condition)],on=.(day,run)] |> 
   ggplot(aes(x=winid,y=V1,color=ordered(kHz))) + geom_line() + facet_grid(day ~ condition) +
   geom_hline(yintercept = 0,color="gray") + geom_vline(xintercept = 0,color="gray") + 
-  ylab("delta") + xlab("timepoint") + ggtitle(b) + theme_classic()
+  ylab("delta log F") + xlab("timepoint") + theme_classic()
 
 shadup <- lmerControl(check.conv.singular = .makeCC(action = "ignore",tol = formals(isSingular)$tol))
 
@@ -117,3 +117,30 @@ for (d in dses[,unique(day)]) {
   }
 }
 
+ggplot(lldat,aes(y=ll1-ll0,x=t,color=ordered(kHz))) + geom_line() + facet_wrap("day",ncol = 1) +
+  ylab("likelihood ratio") + xlab("timepoint") + theme_classic() + ggtitle(b) +
+  # theme(legend.position = "none",strip.background = element_blank(),strip.text.x = element_blank()) +
+  geom_vline(xintercept = 0,color="gray")
+
+lr2plt <- ggplot(lldat,aes(y=ll2-ll1,x=t,color=ordered(kHz))) + geom_line() + facet_wrap("day",ncol = 1) +
+  ylab("likelihood ratio") + xlab("timepoint") + theme_classic() + ggtitle("Condition differences") +
+  theme(legend.position = "none",strip.background = element_blank(),strip.text.x = element_blank()) +
+  geom_vline(xintercept = 0,color="gray")
+
+
+plot_grid(lr1plt,lr2plt,psthplt,nrow = 1,rel_widths = c(0.25,.25,1),align = "h",axis="bt")
+
+foo <- manyfits$`220124`
+popdist <- data.table()
+for (i in 1:length(foo)) {
+  ipd <- data.table()
+  for (y in foo[[i]]) ipd <- rbind(ipd,data.table(mu=fixef(y)[1],sd=VarCorr(y)$roi[1] |> sqrt()))
+  ipd$t <- names(foo[[i]])
+  ipd$kHz <- names(foo)[i]
+  popdist <- rbind(popdist,ipd)
+}
+popdist[,t := str_extract(t,"-?\\d+") |> as.numeric()]
+popdist[,kHz:=ordered(kHz,unique(kHz))]
+popdist[t %in% -1:5] |> ggplot(aes(y=mu,ymin=mu-sd,ymax=mu+sd,x=t)) + geom_hline(yintercept = 0,color="gray") + geom_vline(xintercept = 0,color="gray") + 
+  geom_pointrange() + facet_wrap("kHz") + geom_line() + theme_classic()
+  
