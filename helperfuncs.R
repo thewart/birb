@@ -47,13 +47,16 @@ dayreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
     }
     
   }
-  metadat[,run:=str_extract(run,"\\d*$")]
-  out <- list(meta=metadat)
-  if ("roi" %in% type) out$roi <- roidat
-  if ("stim" %in% type) out$stim <- stimdat
-  if ("beh" %in% type) out$beh <- behdat
   
-  return(out)
+  if (length(metadat)>0) {
+    metadat[,run:=str_extract(run,"\\d*$")]
+    out <- list(meta=metadat)
+    if ("roi" %in% type) out$roi <- roidat
+    if ("stim" %in% type) out$stim <- stimdat
+    if ("beh" %in% type) out$beh <- behdat
+    return(out)
+  }
+  
 }
 
 slicetime <- function(t,wsize,wnum,past=T) {
@@ -82,7 +85,7 @@ brbreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
     if (length(ddat[[1]])>0) for (l in names(ddat)) {
       if (l == "pil") next
       ddat[[l]]$day <- d
-      out[[l]] <- rbind(out[[l]], ddat[[l]])
+      out[[l]] <- rbind(out[[l]], ddat[[l]], fill=T)
     }
   }
   
@@ -122,18 +125,8 @@ permnull <- function(value,group=NULL) {
     pval <- dat$V2
   }
   
-  #   ts[i] <- switch(tstype, 
-  #                   pop_mean = dat[,t.test(px)$statistic,by=roi][,t.test(V1)$statistic],
-  #                   prop_sig = dat[,t.test(px)$p.value,by=roi][,mean(V1>0.95)],
-  #                   lrt = logLik(lmer(px ~ 1 + (1|roi) + (1|stimNum),data=dat,REML = F)) - 
-  #                     logLik(lmer(px ~ 0 + (1|stimNum),data=dat,REML = F)))
-  # }
-  # 
-  # return(ts)
   return(pval)
 }
-
-
 
 lossybin <- function(ldat,wsize,s=1) {
   bigt <- ldat[,max(t)]
@@ -159,11 +152,28 @@ Wcalc <- function(ldat,wsize=5,s=1,method="ZCA-cor",cov.est="shrinkage") {
   return(list(mu=mu,W=W))
 }
 
-
 whiten_timepoints <- function(ldat,stim,wsize,s,method="ZCA-cor",w0size=wsize,cov.est="shrinkage") {
   W <- Wcalc(ldat,w0size,s,method,cov.est)
   # if (any(is.na(W$W))) W <- Wcalc(ldat,1,s,method)
   lsdat <- binnify(ldat,stim,wsize,1)
   dsdat <- lsdat[,.(delta=diff(log(lum))),by=.(day,run,stimNum,soundID,roi)]
   return(dsdat[,.(roi,delta,z=as.vector(W$W %*% (delta-W$mu))), by=.(day,run,stimNum,soundID)])
+}
+
+pcday <- function(ldat,scale=T,rank=5) {
+  X <- dcast(ldat, run + t ~ roi, value.var="lum")
+  pca <- prcomp(X[,-(1:2),with=F],center=T,scale=scale,rank=rank)
+  Y <- pca$x %*% diag(1/pca$sdev[1:5])
+  colnames(Y) <- paste0("PC",1:rank)
+  Y <- cbind(X[,.(run,t)],as.data.table(Y))
+  return(melt(Y,id.vars=c("run","t"), variable.name="component", value.name="lum"))
+}
+
+pcrun <- function(ldat,scale=T,rank=5) {
+  X <- dcast(ldat, t ~ roi, value.var="lum")
+  pca <- prcomp(X[,-1,with=F],center=T,scale=scale,rank=rank)
+  Y <- pca$x %*% diag(1/pca$sdev[1:5])
+  colnames(Y) <- paste0("PC",1:rank)
+  Y <- cbind(t=X[,t],as.data.table(Y))
+  return(melt(Y,id.vars="t", variable.name="component", value.name="lum"))
 }

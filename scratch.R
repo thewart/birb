@@ -4,10 +4,10 @@
 # path <- file.path(mntdir,"smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab","All_Staff","Seth/For Tom")
 
 brbid <- dir(path) |> str_subset("mat$",negate = T)
-c <- c("Female_distal_neg","Female_distal_pos","Female_proximal_neg","Female_proximal_pos")
-b <- brbid[5]
+# c <- c("Isolated","Female_distal_neg","Female_distal_pos","Female_proximal_neg","Female_proximal_pos")
+c <- c("USV_playback","USV_presentation")
+b <- brbid[1]
 brbdat <- brbreader(file.path(path,b),cond = c)
-
 
 d <- brbdat$meta[,unique(day)][1]
 stim <- brbdat$stim[day==d]
@@ -18,7 +18,7 @@ ldat[,lum:=lm(log(lum) ~ 1 + t) |> resid(),by=.(run,roi)]
 #                               soundID=0, run=stim[1,run], day=stim[1,day]))
 # setkey(stim,"soundFrames")
 # stim[,stimNum:=1:.N]
-
+#####
 redat <- binnify(ldat,stim,15,1)
 redat[,t := t/(15*60)]
 # redat[,postStim := as.numeric(postStim)]
@@ -62,18 +62,52 @@ standat <- list(Y = dcast(diffdat, roi ~ stimNum,value.var = "delta")[,-1,with=F
                 N = diffdat[,uniqueN(stimNum)], M = diffdat[,uniqueN(roi)], K = 1)
 fit <- sampling(model,standat,iter=400,chains=1,pars=c("mu_alpha","sigma_alpha","sigma_lambda","sigma","Lambda"))
 
-
+#####
 ##### psth
-ldat <- brbdat$roi
-ldat[,lum:=lm(log(lum) ~ 1 + t) |> resid(),by=.(roi,run)]
-redat <- binnify(ldat,brbdat$stim,1,15)
-diffdat <- redat[,.(kHz=soundFrequency[-1]/1e3,winid=winid[-1],delta=diff(lum)),
-                 by=.(day,run,stimNum,roi)]
+ldat <- copy(brbdat$roi)
+# ldat[,lum:=lm(log(lum) ~ 1 + t) |> resid(),by=.(day,roi,run)]
 
-psthplt <- diffdat[winid>-6,mean(delta),by=.(day,run,kHz,winid)][brbdat$meta[,.(day,run,condition)],on=.(day,run)] |> 
-  ggplot(aes(x=winid,y=V1,color=ordered(kHz))) + geom_line() + facet_grid(day ~ condition) +
+# if delta
+# ldat[,lum:=c(NA,diff(log(lum))),by=.(day,run,roi)]
+# ldat[,lum:=lum-mean(lum, na.rm=T),by=.(day,run,roi)]
+# if not
+# ldat[,lum:=log(lum)-mean(log(lum)),by=.(day,run,roi)]
+
+redat <- binnify(ldat,brbdat$stim,1,30)
+# if not delta
+redat[,lum:= log(lum) - log(lum[winid==-1]),by=.(day,run,roi,stimNum)]
+# diffdat <- redat[,.(t=t[-1],kHz=soundFrequency[-1]/1e3,winid=winid[-1],delta=diff(lum)),
+#                  by=.(day,run,stimNum,roi)]
+# psthplt <- diffdat[winid>-6,mean(delta),by=.(day,run,kHz,winid)][brbdat$meta[,.(day,run,condition)],on=.(day,run)] |> 
+#   ggplot(aes(x=winid,y=V1,color=ordered(kHz))) + geom_line() + facet_grid(day ~ condition) +
+#   geom_hline(yintercept = 0,color="gray") + geom_vline(xintercept = 0,color="gray") + 
+#   ylab("delta log F") + xlab("timepoint") + theme_classic()
+
+# diffdat <- redat[,.(t=t[-1],sID=soundID[-1],winid=winid[-1],delta=diff(lum)),by=.(day,run,stimNum,roi)]
+
+redat[,mean(lum),by=.(day,run,soundID,winid)][brbdat$meta[,.(day,run,condition)],on=.(day,run)] |> 
+  ggplot(aes(x=winid,y=V1,color=ordered(soundID))) + geom_line() + facet_grid(day ~ condition) +
   geom_hline(yintercept = 0,color="gray") + geom_vline(xintercept = 0,color="gray") + 
   ylab("delta log F") + xlab("timepoint") + theme_classic()
+
+nsamp <- 1e2
+bigt <- data.table()
+for (d in redat[,unique(day)]) {
+  for (w in redat[winid>=0,unique(winid)]) {
+    
+    ddat <- redat[day==d & winid==w]
+    tp <- matrix(nrow=ddat[,uniqueN(paste0(soundID,run))],ncol=nsamp)
+    for (i in 1:nsamp) {
+      cat(i,"\r")
+      ddat[,perm := sample(c(-1,1),1)*lum,by=.(run,stimNum)]
+      tp[,i] <- ddat[,mean(perm)*sqrt(.N)/sd(perm),by=.(run,soundID,roi)][,max(abs(V1)),by=.(run,soundID)]$V1
+    }
+    tobs <- ddat[,mean(lum)*sqrt(.N)/sd(lum),by=.(day,run,soundID,roi,winid)][,.(tmax=max(abs(V1))),by=.(day,run,soundID,winid)]
+    tobs$pval <- sapply(1:nrow(tobs),function(i) mean(tp[i,]>tobs[i,tmax]))
+    bigt <- rbind(bigt,tobs)
+  }
+}
+
 
 shadup <- lmerControl(check.conv.singular = .makeCC(action = "ignore",tol = formals(isSingular)$tol))
 
@@ -130,6 +164,7 @@ lr2plt <- ggplot(lldat,aes(y=ll2-ll1,x=t,color=ordered(kHz))) + geom_line() + fa
 
 plot_grid(lr1plt,lr2plt,psthplt,nrow = 1,rel_widths = c(0.25,.25,1),align = "h",axis="bt")
 
+######
 foo <- manyfits$`220124`
 popdist <- data.table()
 for (i in 1:length(foo)) {
@@ -144,3 +179,15 @@ popdist[,kHz:=ordered(kHz,unique(kHz))]
 popdist[t %in% -1:5] |> ggplot(aes(y=mu,ymin=mu-sd,ymax=mu+sd,x=t)) + geom_hline(yintercept = 0,color="gray") + geom_vline(xintercept = 0,color="gray") + 
   geom_pointrange() + facet_wrap("kHz") + geom_line() + theme_classic()
   
+######
+
+##### oh behav ####
+
+foo <- brbdat$beh[,.(beh=pupil_pxlarea,t,day,run)][diffdat,on=.(t,day,run)]
+foo[,beh:=cut_number(beh,5,ordered_result=T) |> as.numeric(),by=day]
+# foo[,beh:=beh>0]
+foo[winid>-1,mean(delta),by=.(day,kHz,winid,beh)] |> 
+  ggplot(aes(x=winid,y=V1,color=ordered(beh))) + geom_line() + facet_grid(day ~ kHz) + theme_dark()
+
+brbdat$beh[,.(move=cut_number(pupil_pxlarea,3,ordered_result=T),t,day,run)][diffdat,on=.(t,day,run)][winid>-1,mean(delta),by=.(day,kHz,winid,move)] |> 
+  ggplot(aes(x=winid,y=V1,color=move)) + geom_line() + facet_grid(day ~ kHz) + theme_dark()
