@@ -1,14 +1,4 @@
-fffilt <- function(og, lo=1, hi=padto/2, padto=2e4) {
-  npad <- padto - length(og)
-  og <- c(og, rep(mean(og),npad))
-  juh <- fft(og-mean(og))
-  
-  filt <- rep(0,padto/2)
-  filt[lo:hi] <- 1
-  filt <- c(0,filt,rev(filt)[-1])
 
-  return( (Re(fft(filt*juh,inverse = T))/length(juh))[1:(length(juh)-npad)] + mean(og))
-}
 
 
 

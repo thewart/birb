@@ -1,13 +1,14 @@
-dayreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
-  brbstr <- str_split_fixed(dir(path),"_",4)
-  brbrun <- unique(brbstr[,3])
+dayreader <- function(path, cond="All",type=c("roi","stim","pil","beh"),run=NULL) {
+  allfiles <- dir(path)
+  brbstr <- str_split_fixed(allfiles,"_",4)
+  if (is.null(run)) run <- unique(brbstr[,3])
   filebase <- paste(dirname(path) |> basename(), basename(path),sep="_")
   roidat <- data.table()
   metadat <- data.table()
   stimdat <- data.table()
   behdat <- data.table()
   
-  for (r in brbrun) {
+  for (r in run) {
     brbpre <- file.path(path, paste(filebase,r,sep="_"))
     rmetadat <- fread(paste0(brbpre,"_info.csv"))
     if (!("All" %in% cond) & !(rmetadat$condition %in% cond)) next
@@ -39,13 +40,15 @@ dayreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
     }
     
     if ("beh" %in% type) {
-      beh <- fread(paste0(brbpre,"_behavior.csv"))
-      beh[,t:=seq_len(.N)]
-      beh$run <- r
-      
-      behdat <- rbind(behdat,beh)
+      if (paste(filebase,r,"behavior.csv",sep="_") %in% allfiles) {
+        beh <- fread(paste0(brbpre,"_behavior.csv"))
+        beh[,t:=seq_len(.N)]
+        beh$run <- r
+        behdat <- rbind(behdat,beh)
+      } else {
+        warning("File ", paste(filebase,r,"behavior.csv",sep="_"), " does not exist")
+      }
     }
-    
   }
   
   if (length(metadat)>0) {
@@ -56,7 +59,6 @@ dayreader <- function(path, cond="All", type=c("roi","stim","pil","beh")) {
     if ("beh" %in% type) out$beh <- behdat
     return(out)
   }
-  
 }
 
 slicetime <- function(t,wsize,wnum,past=T) {
@@ -178,4 +180,24 @@ pcrun <- function(ldat,scale=T,rank=5,renorm=F) {
   colnames(Y) <- paste0("PC",1:rank)
   Y <- cbind(t=X[,t],as.data.table(Y))
   return(melt(Y,id.vars="t", variable.name="component", value.name="lum"))
+}
+
+fffilt <- function(og, lo=1, hi=padto/2, padto=2e4) {
+  npad <- padto - length(og)
+  og <- c(og, rep(mean(og),npad))
+  juh <- fft(og-mean(og))
+  
+  filt <- rep(0,padto/2)
+  filt[lo:hi] <- 1
+  filt <- c(0,filt,rev(filt)[-1])
+  
+  return( (Re(fft(filt*juh,inverse = T))/length(juh))[1:(length(juh)-npad)] + mean(og))
+}
+
+get_bouts <- function(x) {
+  dx <- diff(c(0,x,0))
+  out <- data.table(start_bout=which(dx==1),end_bout=which(dx==-1))
+  out[,dur_bout:=end_bout-start_bout]
+  out[,num_bout:=1:.N]
+  return(out)
 }
