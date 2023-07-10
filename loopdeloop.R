@@ -2,7 +2,7 @@ source("helperfuncs.R")
 library(lme4)
 library(data.table)
 library(ggplot2)
-path <- "~/Desktop/For Tom/"
+path <- "/run/user/1001/gvfs/smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab/All_Staff/Seth/For Tom/"
 
 brbid <- dir(path) |> str_subset("mat$",negate = T)
 c <- c("Isolated","Female_distal_neg","Female_distal_pos","Female_proximal_neg","Female_proximal_pos")

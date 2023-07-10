@@ -1,9 +1,9 @@
-path <- "~/Desktop/For Tom"
+path <- "/run/user/1001/gvfs/smb-share:server=duhsnas-pri.dhe.duke.edu,share=dusom_mooneylab/All_Staff/Seth/For Tom/"
 source("helperfuncs.R")
 mouseid <- dir(path)
 
-thesevars <- c("von_onset","shoulder_delta","rpm_delta")
-nothesevars <- c("shoulder_delta","rpm_delta")
+thesevars <- c("von_onset","shoulder_delta","rpm_delta") # variables in the full model
+nothesevars <- c("shoulder_delta","rpm_delta") # variables in the null model
 fitdat <- data.table()
 sigdat <- data.table()
 for (thismouse in mouseid) {
@@ -13,7 +13,7 @@ for (thismouse in mouseid) {
   vocsess <- behdat$beh[,sum(vocal_present),by=.(day,run)][V1>0]
   vocsess <- vocsess[day %in% vocsess[,sum(V1),by=day][V1>900,day]]
   vocsess <- behdat$meta[vocsess,on=.(day,run)][,.(day,run,condition)]
-  vocbeh <- behdat$beh[,.(day,run,t,running_RPM,face_energy,whisker_energy,jaw_energy,shoulder_energy,vocal_rate,vocal_present)][vocsess,on=.(day,run)]
+  vocbeh <- behdat$beh[vocsess,on=.(day,run)]
 
   for (thisday in vocsess[,unique(day)]) {
     # thisday <- vocsess[,unique(day)[j]]
@@ -27,19 +27,30 @@ for (thismouse in mouseid) {
     # ggplot(vocdat[,mean(lum),by=.(winid,day)],aes(x=winid,y=V1,color=day)) + geom_line()
     # ggplot(vocdat[,mean(lum),by=.(winid,roi)],aes(x=winid,y=V1,group=roi)) + geom_line(alpha=0.1)
     
-    delta_dat <- vocbeh[,.(shoulder_delta=c(NA,diff(shoulder_energy)),
+    delta_dat <- vocbeh[,.(shoulder_delta=c(NA,diff(shoulder_deltapix)),
                            rpm_delta=c(NA,diff(running_RPM)),
                            vrate_delta=c(NA,diff(vocal_rate)),
-                           von_onset=c(NA,diff(vocal_present)==1) |> as.numeric(),
-                           von_offset=c(NA,diff(vocal_present)==-1) |> as.numeric()),
-                           # von_delta=c(NA,diff(vocal_present))),
+                           von_delta=c(NA,diff(vocal_present)),
+                           bp_delta=c(NA,diff(bandpower_USV)),
+                           fdist10_delta=c(NA,diff(Female_distance<10)),
+                           fdist5_delta=c(NA,diff(Female_distance<5))),
                         by=.(day,run)]
+    delta_dat[,`:=` (von_onset=as.numeric(von_delta==1),
+                     von_offset=as.numeric(von_delta==-1),
+                     fdist10_onset=as.numeric(fdist10_delta==1),
+                     fdist10_offset=as.numeric(fdist10_delta==-1),
+                     fdist10_onset=as.numeric(fdist10_delta==1),
+                     fdist10_offset=as.numeric(fdist10_delta==-1)),
+              by=.(day,run)]
+                     
+                     
     delta_dat <- cbind(vocbeh[,.(t)],delta_dat[,c(
       shift(shoulder_delta,-5:15,give.names=T),
       shift(vrate_delta,-5:15,give.names = T),
       shift(rpm_delta,-5:15,give.names=T),
       shift(von_onset,-5:15,give.names=T),
-      shift(von_offset,-5:15,give.names=T)),
+      shift(von_offset,-5:15,give.names=T),
+      shift(bp_delta,-5:15,give.names=T)),
       # shift(von_delta,-5:15,give.names=T)),
       by=.(day,run)])
     

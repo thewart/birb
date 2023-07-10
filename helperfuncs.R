@@ -44,7 +44,17 @@ dayreader <- function(path, cond="All",type=c("roi","stim","pil","beh"),run=NULL
         beh <- fread(paste0(brbpre,"_behavior.csv"))
         beh[,t:=seq_len(.N)]
         beh$run <- r
-        behdat <- rbind(behdat,beh)
+        
+        fdist <- paste(filebase,r,"femaleDistance.csv",sep="_")
+        if (fdist %in% allfiles) {
+          beh <- cbind(beh,fread(paste0(brbpre,"_femaleDistance.csv")))
+        }
+        spow <- paste(filebase,r,"soundpower.csv",sep="_")
+        if (spow %in% allfiles) {
+          beh <- cbind(beh,fread(paste0(brbpre,"_soundpower.csv")))
+        }
+        behdat <- rbind(behdat,beh,fill=T)
+        
       } else {
         warning("File ", paste(filebase,r,"behavior.csv",sep="_"), " does not exist")
       }
